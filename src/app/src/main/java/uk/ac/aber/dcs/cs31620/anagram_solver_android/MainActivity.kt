@@ -6,14 +6,14 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,8 +40,12 @@ var savedInstanceState2: Bundle? = null
 private val showCompleteDialog = mutableStateOf(false)
 private val showMissingDialog = mutableStateOf(false)
 private val showCrosswordDialog = mutableStateOf(false)
+private val showCheckedStateDialog = mutableStateOf(false)
 
+private var checkedState = mutableStateOf(false)
 
+val mainColor = Color(60, 172, 174)
+val accentColor = Color(200, 244, 249)
 
 class MainActivity : ComponentActivity() {
 
@@ -54,7 +58,7 @@ class MainActivity : ComponentActivity() {
                 // A surface container using the 'background' color from the theme
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colors.secondary
+                    color = mainColor
                 ) {
                     ScreenSetup()
                     //Checks whether or not the dialogs should be open
@@ -67,11 +71,14 @@ class MainActivity : ComponentActivity() {
                     if(showCrosswordDialog.value){
                         CrosswordDialog()
                     }
+                    if(showCheckedStateDialog.value){
+                        TooManyCharactersAlert()
+                    }
                 }
             }
         }
 
-        MobileAds.initialize(this){}
+        //MobileAds.initialize(this){}
 
     }
 
@@ -87,7 +94,8 @@ fun ScreenSetup(viewModel: AnagramViewModel = viewModel()){
     MainScreen(
         matches = viewModel.matches,
         words = viewModel.words,
-        readAnagram = {viewModel.readAnagram(it)}
+        readAnagram = {viewModel.readAnagram(it, checkedState)},
+        sortWords = {viewModel.sortWords(it)}
     )
 }
 
@@ -95,24 +103,46 @@ fun ScreenSetup(viewModel: AnagramViewModel = viewModel()){
  * Creates the top app bar and the information button used for instructions
  */
 @Composable
-fun AnagramAppBar(){
+fun AnagramAppBar(sortWords: (Int) -> Unit){
 
     var isExpanded by remember { mutableStateOf(false)}
+    var isFilterExpanded by remember { mutableStateOf(false)}
+    var isSettingsExpanded by remember { mutableStateOf(false)}
+
+
 
     TopAppBar(
+        backgroundColor = mainColor,
         title =
         {
-            Text(text = "Anagram Solver")
+            Text(text = "Anagram Solver", color = Color.White)
         },
         actions =
         {
+
+            IconButton(
+                onClick = { isFilterExpanded = !isFilterExpanded}
+            ){
+                Icon(Icons.Default.Sort, "Sort", tint = Color.White)
+            }
             IconButton(
                 onClick = { isExpanded = !isExpanded }
             ) {
-                Icon(Icons.Default.Info, "Overflow Menu")
+                Icon(Icons.Default.Info, "Overflow Menu", tint = Color.White)
+            }
+            IconButton(
+                onClick = {isSettingsExpanded = !isSettingsExpanded}
+            ){
+                Icon(Icons.Default.Settings, "Settings Menu", tint = Color.White)
             }
 
 
+            DropdownMenu(expanded = isFilterExpanded,
+                onDismissRequest = { isFilterExpanded = false }
+            ) {
+                //Opens the filter menu
+                FilterMenu(sortWords)
+            }
             DropdownMenu(
                 expanded = isExpanded,
                 onDismissRequest = { isExpanded = false }
@@ -122,9 +152,52 @@ fun AnagramAppBar(){
                 OverflowMenu()
             }
 
+            DropdownMenu(expanded = isSettingsExpanded,
+                onDismissRequest = { isSettingsExpanded = false }
+            ) {
+                //Opens the settings menu
+                SettingsMenu()
+            }
+
         }
     )
 }
+
+@Composable
+fun FilterMenu(sortWords: (Int) -> Unit){
+    DropdownMenuItem(onClick = { sortWords(1) }
+    ) {
+        Text(text = "A - Z")
+    }
+    DropdownMenuItem(onClick = { sortWords(2) }
+    ) {
+        Text(text = "Z - A")
+    }
+    DropdownMenuItem(onClick = { sortWords(3) }
+    ) {
+        Text(text = "Length - Asc")
+    }
+    DropdownMenuItem(onClick = { sortWords(4) }
+    ) {
+        Text(text = "Length - Desc")
+    }
+}
+
+@Composable
+fun SettingsMenu(){
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(4.dp)
+    ){
+        Text(text = "Show Sub Anagrams")
+
+        Switch(
+            checked = checkedState.value,
+            onCheckedChange = {checkedState.value = it}
+        )
+    }
+}
+
 
 @Composable
 fun OverflowMenu(){
@@ -215,6 +288,7 @@ fun MainScreen(
     matches: Int,
     words: MutableList<String>,
     readAnagram: (String) -> Unit,
+    sortWords: (Int) -> Unit
 ){
 
     val navController = rememberNavController()
@@ -224,7 +298,7 @@ fun MainScreen(
         startDestination = "solve_screen"
     ){
         composable("solve_screen"){
-            SolveScreen(matches = matches, words = words, readAnagram = readAnagram)
+            SolveScreen(matches = matches, words = words, readAnagram = readAnagram, sortWords = sortWords)
         }
 
     }
@@ -234,18 +308,19 @@ fun MainScreen(
 fun SolveScreen(
     matches: Int,
     words: MutableList<String>,
-    readAnagram: (String) -> Unit){
+    readAnagram: (String) -> Unit,
+    sortWords: (Int) -> Unit){
     Scaffold(
         topBar = {
-            AnagramAppBar()
+            AnagramAppBar(sortWords = sortWords)
         },
         bottomBar = {
-            AdView()
+            //AdView()
         }
     )
     {
 
-        Column{
+        Column(modifier = Modifier.background(Color.White)){
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -305,21 +380,54 @@ fun InputRow(
                 onValueChange = {onTextChange(it)},
                 singleLine = true,
                 label = { Text(text = "Enter anagram")},
-                modifier = Modifier.padding(8.dp)
+                colors = TextFieldDefaults.outlinedTextFieldColors(
+                    focusedBorderColor = mainColor,
+                    cursorColor = mainColor,
+                    focusedLabelColor = mainColor,
+                unfocusedBorderColor = mainColor),
+                modifier =
+                Modifier
+                    .padding(8.dp)
             )
         }
 
         //Starts the process of solving the anagram
         Button(
+            colors = ButtonDefaults.buttonColors(backgroundColor = mainColor),
             onClick =
             {
-                readAnagram(anagramState)
+                if((anagramState.contains('+') && checkedState.value) || (anagramState.contains('.') && checkedState.value)){
+                    showCheckedStateDialog.value = true
+                }else{
+                    readAnagram(anagramState)
+                }
             },
             shape = RoundedCornerShape(24.dp)
         ) {
-            Text(text = "Solve")
+            Icon(Icons.Default.Search, "Solve", tint = Color.White)
         }
     }
+}
+
+@Composable
+fun TooManyCharactersAlert(){
+    AlertDialog(
+        onDismissRequest = { /*TODO*/ },
+        confirmButton = {
+            TextButton(onClick = { showCheckedStateDialog.value = false })
+            {
+                Text(text = "OK")
+            }
+        },
+        title = {
+            Text(
+                text = "Sub Anagrams Enabled",
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold)},
+        text = { Text(text = "The option to search for sub anagrams" +
+                "cannot be enabled whilst the anagram " +
+                "contains either a (+) or a (.)")}
+    )
 }
 
 @Composable
@@ -368,6 +476,7 @@ fun WordCardRow(word: String){
         modifier = Modifier
             .fillMaxWidth()
             .padding(0.dp)
+            .background(mainColor)
     ){
         Column(
             verticalArrangement = Arrangement.Center
@@ -376,7 +485,7 @@ fun WordCardRow(word: String){
                 text = word,
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Light,
-                color = Color.Black,
+                color = Color.White,
                 modifier = Modifier
                     .padding(8.dp, 0.dp)
             )
@@ -394,7 +503,7 @@ fun WordCardRow(word: String){
                 Icon(
                     imageVector = Icons.Default.Search,
                     "Search",
-                    tint = Color.Gray)
+                    tint = Color.White)
             }
         }
     }
@@ -423,6 +532,9 @@ fun AdView(){
                         )
                     )
                     adUnitId = "ca-app-pub-8568528808185925/7160375269"
+
+                    //adUnitId = "ca-app-pub-8568528808185925/5772191185"
+
                     //adUnitId = "ca-app-pub-3940256099942544/6300978111"
                     loadAd(AdRequest.Builder().build())
                 }

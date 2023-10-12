@@ -1,11 +1,9 @@
 package uk.ac.aber.dcs.cs31620.anagram_solver_android
 
 import android.app.Application
+import android.widget.Switch
 import android.widget.Toast
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.lifecycle.AndroidViewModel
 import java.io.BufferedReader
@@ -58,9 +56,10 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
      *
      * @param anagram as a string
      */
-    fun readAnagram(anagram: String){
+    fun readAnagram(anagram: String, checkedState: MutableState<Boolean>){
         val dictionaryWords = readDictionary()
-        val filteredDictionary = filterDictionaryToLength(dictionaryWords, anagram)
+        val filteredDictionary = filterDictionaryToLength(dictionaryWords, anagram, checkedState)
+
         matches = if(anagram.contains('+')){
             clearList(words)
             solveAnagramMissingLetters(anagram, filteredDictionary)
@@ -69,7 +68,12 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
             clearList(words)
             solveAnagramCrossword(anagram, filteredDictionary)
             words.size
-        }else{
+        }else if(checkedState.value){
+            clearList(words)
+            solveAnagramScrabble(anagram, filteredDictionary)
+            words.size
+        }
+        else{
             clearList(words)
             solveAnagramComplete(anagram, filteredDictionary)
             words.size
@@ -83,6 +87,27 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
      */
     private fun clearList(words: SnapshotStateList<String>){
         words.clear()
+    }
+
+    private fun solveAnagramScrabble(anagram: String, filteredDictionary: List<String>){
+        var wordFound = false
+
+        for (word in filteredDictionary){
+            for (letter in word){
+                if (countLetterOccurrences(word, letter) <= countLetterOccurrences(anagram, letter)){
+                    wordFound = true
+                }else{
+                    wordFound = false
+                    break
+                }
+            }
+            if(wordFound){
+                if(!words.contains(word) && words.size < wordsCap){
+                    words.add(word)
+                }
+            }
+        }
+
     }
 
     /**
@@ -151,7 +176,7 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
      *
      * @return whether the word is a match
      */
-    private fun hasCorrectLettersComplete(anagram: String, word: String): Boolean {
+     private fun hasCorrectLettersComplete(anagram: String, word: String): Boolean {
         var lettersFoundCount = 0
 
         for (i in anagram.indices) {
@@ -167,6 +192,29 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
 
         return lettersFoundCount == anagram.length
     }
+
+    /**
+     * Test for scrabble algorithm
+     */
+    private fun hasCorrectLettersScrabble(anagram: String, word: String): Boolean{
+        var wordFound = false
+
+        for (letter in word) {
+            val anagramLetterCount = countLetterOccurrences(anagram, letter)
+            val wordLetterCount = countLetterOccurrences(word, letter)
+
+            if (wordLetterCount <= anagramLetterCount) {
+                wordFound = true
+            } else {
+                wordFound = false
+                break
+            }
+        }
+
+        return wordFound
+    }
+
+
 
     /**
      * Checks if the word contains the correct
@@ -229,8 +277,39 @@ class AnagramViewModel(application: Application) : AndroidViewModel(application)
         return string.count { it == char }
     }
 
-    private fun filterDictionaryToLength(dictionaryWords: List<String>, anagram: String): List<String>{
-        return dictionaryWords.filter { it.length == anagram.length }
+    /**
+     * Filters the dictionary to the correct length
+     *
+     * When sub anagrams are disabled, the dictionary
+     * is filtered to contain only words the same length
+     * as the anagram
+     *
+     * When sub anagrams are enabled, the dictionary is
+     * filtered to contain any words where the length is
+     * less than or equal to the length of the string of
+     * letters entered
+     */
+    private fun filterDictionaryToLength(dictionaryWords: List<String>, anagram: String, checkedState: MutableState<Boolean>): List<String>{
+        return if (checkedState.value){
+            dictionaryWords.filter { it.length <= anagram.length}
+        }else {
+            dictionaryWords.filter { it.length == anagram.length }
+        }
+
+    }
+
+    fun sortWords(sortType: Int){
+        // Sort Types
+        // 1 = Alphabetically
+        // 2 = Reverse Alphabetically
+        // 3 = Length Asc
+        // 4 = Length Desc
+        when (sortType){
+            1 -> words.sort()
+            2 -> words.sortDescending()
+            3 -> words.sortBy { it.length }
+            4 -> words.sortByDescending { it.length }
+        }
     }
 
 }
